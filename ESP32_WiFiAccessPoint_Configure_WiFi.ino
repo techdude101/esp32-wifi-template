@@ -19,8 +19,9 @@ const char* SOFT_AP_PSK = "12345678"; // Must be 8 characters or more
 
 char ssid[32] = "";
 char password[63] = "";
-volatile boolean g_is_wifi_configured = false;
-volatile boolean g_is_wifi_client_connected = false;
+static volatile boolean g_is_wifi_configured = false;
+static volatile boolean g_is_wifi_client_connected = false;
+static volatile boolean g_is_wifi_connected = false;
 
 AsyncWebServer server(80);
 
@@ -223,6 +224,7 @@ void setup(void) {
       #endif
     }
     network_connected = (WiFi.status() == WL_CONNECTED);
+    g_is_wifi_connected = network_connected;
   }
 
   if (network_connected == false) {
@@ -317,7 +319,9 @@ void loop(void) {
     delay(1);
   }
   
-  if ((g_is_wifi_client_connected == false) && g_is_wifi_configured) {
+  // BUG - reconnects to configured WiFi network every 60 seconds
+  // Restart when wifi client is NOT connected, wifi IS configured in EEPROM and if NOT connected to a wifi network
+  if ((g_is_wifi_client_connected == false) && g_is_wifi_configured && (g_is_wifi_connected == false)) {
     #ifndef NDEBUG
     Serial.println("Restart");
     #endif
