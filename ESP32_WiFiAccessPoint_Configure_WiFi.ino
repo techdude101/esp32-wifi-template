@@ -7,10 +7,12 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 
-// #include <EEPROM.h>
-
 #include "HTMLForm.h" // HTML Form
 #include "wifi_config.h"
+
+#define BAUD_RATE 115200
+
+//#define NDEBUG
 
 const char* SOFT_AP_SSID = "ESP32";
 const char* SOFT_AP_PSK = "12345678"; // Must be 8 characters or more
@@ -23,89 +25,141 @@ volatile boolean g_is_wifi_client_connected = false;
 AsyncWebServer server(80);
 
 void WiFiEvent(WiFiEvent_t event) {
+  #ifndef NDEBUG
   Serial.printf("[WiFi-event] event: %d\n", event);
+  #endif
 
   switch (event) {
     case SYSTEM_EVENT_WIFI_READY: 
-      // Serial.println("WiFi interface ready");
+      #ifndef NDEBUG
+      Serial.println("WiFi interface ready");
+      #endif
       break;
     case SYSTEM_EVENT_SCAN_DONE:
-      // Serial.println("Completed scan for access points");
+      #ifndef NDEBUG
+      Serial.println("Completed scan for access points");
+      #endif
       break;
     case SYSTEM_EVENT_STA_START:
-      // Serial.println("WiFi client started");
+      #ifndef NDEBUG
+      Serial.println("WiFi client started");
+      #endif
       break;
     case SYSTEM_EVENT_STA_STOP:
-      // Serial.println("WiFi clients stopped");
+      #ifndef NDEBUG
+      Serial.println("WiFi clients stopped");
+      #endif
       break;
     case SYSTEM_EVENT_STA_CONNECTED:
-      // Serial.println("Connected to access point");
+      #ifndef NDEBUG
+      Serial.println("Connected to access point");
+      #endif
       break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
-      // Serial.println("Disconnected from WiFi access point");
-      // WiFi.begin(ssid, password);
+      #ifndef NDEBUG
+      Serial.println("Disconnected from WiFi access point");
+      #endif
       break;
     case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:
-      // Serial.println("Authentication mode of access point has changed");
+      #ifndef NDEBUG
+      Serial.println("Authentication mode of access point has changed");
+      #endif
       break;
     case SYSTEM_EVENT_STA_GOT_IP:
-      // Serial.print("Obtained IP address: ");
-      // Serial.println(WiFi.localIP());
+      #ifndef NDEBUG
+      Serial.print("Obtained IP address: ");
+      Serial.println(WiFi.localIP());
+      #endif
       break;
     case SYSTEM_EVENT_STA_LOST_IP:
-      // Serial.println("Lost IP address and IP address is reset to 0");
+      #ifndef NDEBUG
+      Serial.println("Lost IP address and IP address is reset to 0");
+      #endif
       break;
     case SYSTEM_EVENT_STA_WPS_ER_SUCCESS:
-      // Serial.println("WiFi Protected Setup (WPS): succeeded in enrollee mode");
+      #ifndef NDEBUG
+      Serial.println("WiFi Protected Setup (WPS): succeeded in enrollee mode");
+      #endif
       break;
     case SYSTEM_EVENT_STA_WPS_ER_FAILED:
-      // Serial.println("WiFi Protected Setup (WPS): failed in enrollee mode");
+      #ifndef NDEBUG
+      Serial.println("WiFi Protected Setup (WPS): failed in enrollee mode");
+      #endif
       break;
     case SYSTEM_EVENT_STA_WPS_ER_TIMEOUT:
-      // Serial.println("WiFi Protected Setup (WPS): timeout in enrollee mode");
+      #ifndef NDEBUG
+      Serial.println("WiFi Protected Setup (WPS): timeout in enrollee mode");
+      #endif
       break;
     case SYSTEM_EVENT_STA_WPS_ER_PIN:
-      // Serial.println("WiFi Protected Setup (WPS): pin code in enrollee mode");
+      #ifndef NDEBUG
+      Serial.println("WiFi Protected Setup (WPS): pin code in enrollee mode");
+      #endif
       break;
     case SYSTEM_EVENT_AP_START:
-      // Serial.println("WiFi access point started");
+      #ifndef NDEBUG
+      Serial.println("WiFi access point started");
+      #endif
       break;
     case SYSTEM_EVENT_AP_STOP:
-      // Serial.println("WiFi access point  stopped");
+      #ifndef NDEBUG
+      Serial.println("WiFi access point  stopped");
+      #endif
       break;
     case SYSTEM_EVENT_AP_STACONNECTED:
-      // Serial.println("Client connected");
+      #ifndef NDEBUG
+      Serial.println("Client connected");
+      #endif
       // Set the flag when a client connects
       g_is_wifi_client_connected = true;
       break;
     case SYSTEM_EVENT_AP_STADISCONNECTED:
-      // Serial.println("Client disconnected");
+      #ifndef NDEBUG
+      Serial.println("Client disconnected");
+      #endif
+      
       // Remove the flag when a client disconnects
       g_is_wifi_client_connected = false;
       break;
     case SYSTEM_EVENT_AP_STAIPASSIGNED:
-      // Serial.println("Assigned IP address to client");
+      #ifndef NDEBUG
+      Serial.println("Assigned IP address to client");
+      #endif
       break;
     case SYSTEM_EVENT_AP_PROBEREQRECVED:
-      // Serial.println("Received probe request");
+       #ifndef NDEBUG
+      Serial.println("Received probe request");
+      #endif
       break;
     case SYSTEM_EVENT_GOT_IP6:
-      // Serial.println("IPv6 is preferred");
+      #ifndef NDEBUG
+      Serial.println("IPv6 is preferred");
+      #endif
       break;
     case SYSTEM_EVENT_ETH_START:
-      // Serial.println("Ethernet started");
+      #ifndef NDEBUG
+      Serial.println("Ethernet started");
+      #endif
       break;
     case SYSTEM_EVENT_ETH_STOP:
-      // Serial.println("Ethernet stopped");
+      #ifndef NDEBUG
+      Serial.println("Ethernet stopped");
+      #endif
       break;
     case SYSTEM_EVENT_ETH_CONNECTED:
-      // Serial.println("Ethernet connected");
+      #ifndef NDEBUG
+      Serial.println("Ethernet connected");
+      #endif
       break;
     case SYSTEM_EVENT_ETH_DISCONNECTED:
-      // Serial.println("Ethernet disconnected");
+      #ifndef NDEBUG
+      Serial.println("Ethernet disconnected");
+      #endif
       break;
     case SYSTEM_EVENT_ETH_GOT_IP:
-      // Serial.println("Obtained IP address");
+      #ifndef NDEBUG
+      Serial.println("Obtained IP address");
+      #endif
       break;
     default: break;
 }}
@@ -121,11 +175,26 @@ void setup(void) {
 
   // Scenario 3 - Device restarts to apply WiFi config
   // Connect to the WiFi network
+
+  // Scenario 4 - WiFi network is not in range (WiFi config stored in EEPROM)
+  // Same behaviour as in scenario 2
+  // Start the softAP for 1 minute to allow a device to connect and change config
+  // If a device connects stop the timer
+  // If the 1 minute timer elapses connect to the WiFi network
+
+  // Scenario 5 - WiFi network name or password has been changed on the router / AP (WiFi config stored in EEPROM)
+  // Same behaviour as in scenario 2
+  // Start the softAP for 1 minute to allow a device to connect and change config
+  // If a device connects stop the timer
+  // If the 1 minute timer elapses connect to the WiFi network
   
   
   boolean network_connected = false;
   boolean init_soft_ap = false;
-  Serial.begin(115200);         // Start the Serial communication to send messages to the computer
+  #ifndef NDEBUG
+  Serial.begin(BAUD_RATE);         // Start the Serial communication to send messages to the computer
+  #endif
+  
   delay(10);
   WiFi.onEvent(WiFiEvent);
 
@@ -135,7 +204,9 @@ void setup(void) {
   // Get the reset reason
   esp_reset_reason_t reset_reason = esp_reset_reason();
   if (reset_reason == ESP_RST_POWERON) {
+    #ifndef NDEBUG
     Serial.println("Power on");
+    #endif
     init_soft_ap = true;
   }
   
@@ -147,21 +218,31 @@ void setup(void) {
     while ((WiFi.status() != WL_CONNECTED) && (connection_attempt < 5)) {
       connection_attempt++;
       delay(1000);
+      #ifndef NDEBUG
       Serial.println("Connecting to WiFi..");
+      #endif
     }
     network_connected = (WiFi.status() == WL_CONNECTED);
   }
 
   if (network_connected == false) {
+    #ifndef NDEBUG
     Serial.println("Configuring access point...");
+    #endif
   
     bool softap_config_result = WiFi.softAP(SOFT_AP_SSID, SOFT_AP_PSK);
+    
+    #ifndef NDEBUG
     Serial.print("Soft AP Config Result: ");
     Serial.println(softap_config_result);
+    #endif
+    
     IPAddress myIP = WiFi.softAPIP();
+    #ifndef NDEBUG
     Serial.print("AP IP address: ");
     Serial.println(myIP);
     Serial.println("Server started");
+    #endif
   
   
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -175,14 +256,19 @@ void setup(void) {
         AsyncWebParameter* p = request->getParam(i);
         Serial.printf("POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
         if ((p->name() == "input-name") && p->value().length() > 3) {
-          Serial.println("Setting ESSID");
           strcpy(ssid, p->value().c_str());
+          
+          #ifndef NDEBUG
+          Serial.println("Setting ESSID");
           Serial.println(ssid);
+          #endif
         }
         if ((p->name() == "input-password") && (p->value().length() > 3)) {
-          Serial.println("Setting PSK");
           strcpy(password, p->value().c_str());
+          #ifndef NDEBUG
+          Serial.println("Setting PSK");
           Serial.println(password);
+          #endif
         }
       }
       
@@ -199,17 +285,25 @@ void setup(void) {
     boolean dns_configuration_result = MDNS.begin("esp32");
     
     if (!dns_configuration_result) {
+        #ifndef NDEBUG
         Serial.println("Error setting up MDNS responder!");
+        #endif
     } else {
+      #ifndef NDEBUG
       Serial.println("mDNS responder started");
+      #endif
     }
   
     server.begin();                            // Actually start the server
+    #ifndef NDEBUG
     Serial.println("HTTP server started");
+    #endif
   } else {
+    #ifndef NDEBUG
     Serial.println("Connected");
     Serial.println(WiFi.localIP());
-  }
+    #endif
+  } // END - if (network_connected == false) {
 }
 
 void loop(void) {
@@ -224,7 +318,10 @@ void loop(void) {
   }
   
   if ((g_is_wifi_client_connected == false) && g_is_wifi_configured) {
+    #ifndef NDEBUG
     Serial.println("Restart");
+    #endif
+    
     ESP.restart();
   }
 }
