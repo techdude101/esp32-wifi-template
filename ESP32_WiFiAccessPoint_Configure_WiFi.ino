@@ -55,11 +55,13 @@ void WiFiEvent(WiFiEvent_t event) {
       #ifndef NDEBUG
       Serial.println("Connected to access point");
       #endif
+      g_is_wifi_connected = true;
       break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
       #ifndef NDEBUG
       Serial.println("Disconnected from WiFi access point");
       #endif
+      g_is_wifi_connected = false;
       break;
     case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:
       #ifndef NDEBUG
@@ -209,11 +211,22 @@ void setup(void) {
     Serial.println("Power on");
     #endif
     init_soft_ap = true;
+    g_is_wifi_configured = false;
   }
   
   if ((g_is_wifi_configured) && (init_soft_ap == false)) {
     // Connect to WiFi
-    WiFi.begin(ssid, password);
+    if (strlen(password) != 0) {
+      #ifndef NDEBUG
+      Serial.println("WiFi password detected in saved config");
+      #endif
+      WiFi.begin(ssid, password);
+    } else {
+      #ifndef NDEBUG
+      Serial.println("Attempting to connect to OPEN WiFi network");
+      #endif
+      WiFi.begin(ssid);
+    }
     
     int connection_attempt = 0;
     while ((WiFi.status() != WL_CONNECTED) && (connection_attempt < 5)) {
@@ -256,7 +269,9 @@ void setup(void) {
       for (int i = 0; i < params; i++)
       {
         AsyncWebParameter* p = request->getParam(i);
+        #ifndef NDEBUG
         Serial.printf("POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
+        #endif
         if ((p->name() == "input-name") && p->value().length() > 3) {
           strcpy(ssid, p->value().c_str());
           
@@ -265,6 +280,20 @@ void setup(void) {
           Serial.println(ssid);
           #endif
         }
+
+        if ((p->name() == "input-wifi-security") && p->value().length() > 3) {
+          #ifndef NDEBUG
+          Serial.println(p->value().c_str());
+          #endif
+          // If WiFi security type is "open" then set the password to an empty string
+          if (strcmp(p->value().c_str(), "open") == 0) {
+            #ifndef NDEBUG
+            Serial.println("Removing password - auth mode is open");
+            #endif
+            strcpy(password, "");
+          }
+        }
+
         if ((p->name() == "input-password") && (p->value().length() > 3)) {
           strcpy(password, p->value().c_str());
           #ifndef NDEBUG
@@ -276,7 +305,8 @@ void setup(void) {
       
       save_wifi_credentials_to_eeprom(ssid, password, 0, 96);
       request->send(200, "text/html", "<h1>Restarting to apply settings</h1>");
-      ESP.restart();
+      // Bug - intermittent web page not available (device restarts before web page can be sent to client)
+      g_is_wifi_configured = true;
     });
 
     server.onNotFound([](AsyncWebServerRequest *request) {
@@ -305,7 +335,7 @@ void setup(void) {
     Serial.println("Connected");
     Serial.println(WiFi.localIP());
     #endif
-  } // END - if (network_connected == false) {
+  } // END - if (network_connected == false)
 }
 
 void loop(void) {
@@ -318,14 +348,23 @@ void loop(void) {
     }
     delay(1);
   }
+
+  // Once configured, restart after 10 seconds
+  if (g_is_wifi_client_connected && g_is_wifi_configured) {
+      // Wait 10 seconds before restarting
+      for (uint8_t i = 0; i < 10; i++) {
+          delay(1000);
+      }
+      ESP.restart();
+  }
   
-  // BUG - reconnects to configured WiFi network every 60 seconds
+  // BUG fix - reconnects to configured WiFi network every 60 seconds
   // Restart when wifi client is NOT connected, wifi IS configured in EEPROM and if NOT connected to a wifi network
   if ((g_is_wifi_client_connected == false) && g_is_wifi_configured && (g_is_wifi_connected == false)) {
     #ifndef NDEBUG
     Serial.println("Restart");
     #endif
-    
+   
     ESP.restart();
   }
 }
