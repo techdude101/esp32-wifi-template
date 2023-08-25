@@ -1,11 +1,9 @@
-#include <WiFi.h>
 #include <WiFiClient.h>
-#include <WiFiAP.h>
 
-#include <ESPmDNS.h>
-
-#include <AsyncTCP.h>
+#include <ESP8266WiFi.h>
+#include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include <ESP8266mDNS.h>
 
 #include "HTMLForm.h" // HTML Form
 #include "wifi_config.h"
@@ -14,7 +12,7 @@
 
 //#define NDEBUG
 
-const char* SOFT_AP_SSID = "ESP32";
+const char* SOFT_AP_SSID = "ESP8266";
 const char* SOFT_AP_PSK = "12345678"; // Must be 8 characters or more
 
 char ssid[32] = "";
@@ -31,138 +29,43 @@ void WiFiEvent(WiFiEvent_t event) {
   #endif
 
   switch (event) {
-    case SYSTEM_EVENT_WIFI_READY: 
-      #ifndef NDEBUG
-      Serial.println("WiFi interface ready");
-      #endif
-      break;
-    case SYSTEM_EVENT_SCAN_DONE:
-      #ifndef NDEBUG
-      Serial.println("Completed scan for access points");
-      #endif
-      break;
-    case SYSTEM_EVENT_STA_START:
-      #ifndef NDEBUG
-      Serial.println("WiFi client started");
-      #endif
-      break;
-    case SYSTEM_EVENT_STA_STOP:
-      #ifndef NDEBUG
-      Serial.println("WiFi clients stopped");
-      #endif
-      break;
-    case SYSTEM_EVENT_STA_CONNECTED:
+    case EVENT_STAMODE_CONNECTED:
       #ifndef NDEBUG
       Serial.println("Connected to access point");
       #endif
       g_is_wifi_connected = true;
       break;
-    case SYSTEM_EVENT_STA_DISCONNECTED:
+    case EVENT_STAMODE_DISCONNECTED:
       #ifndef NDEBUG
       Serial.println("Disconnected from WiFi access point");
       #endif
       g_is_wifi_connected = false;
       break;
-    case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:
+    case EVENT_STAMODE_AUTHMODE_CHANGE:
       #ifndef NDEBUG
       Serial.println("Authentication mode of access point has changed");
       #endif
       break;
-    case SYSTEM_EVENT_STA_GOT_IP:
+    case EVENT_STAMODE_GOT_IP:
       #ifndef NDEBUG
       Serial.print("Obtained IP address: ");
       Serial.println(WiFi.localIP());
       #endif
       break;
-    case SYSTEM_EVENT_STA_LOST_IP:
-      #ifndef NDEBUG
-      Serial.println("Lost IP address and IP address is reset to 0");
-      #endif
-      break;
-    case SYSTEM_EVENT_STA_WPS_ER_SUCCESS:
-      #ifndef NDEBUG
-      Serial.println("WiFi Protected Setup (WPS): succeeded in enrollee mode");
-      #endif
-      break;
-    case SYSTEM_EVENT_STA_WPS_ER_FAILED:
-      #ifndef NDEBUG
-      Serial.println("WiFi Protected Setup (WPS): failed in enrollee mode");
-      #endif
-      break;
-    case SYSTEM_EVENT_STA_WPS_ER_TIMEOUT:
-      #ifndef NDEBUG
-      Serial.println("WiFi Protected Setup (WPS): timeout in enrollee mode");
-      #endif
-      break;
-    case SYSTEM_EVENT_STA_WPS_ER_PIN:
-      #ifndef NDEBUG
-      Serial.println("WiFi Protected Setup (WPS): pin code in enrollee mode");
-      #endif
-      break;
-    case SYSTEM_EVENT_AP_START:
-      #ifndef NDEBUG
-      Serial.println("WiFi access point started");
-      #endif
-      break;
-    case SYSTEM_EVENT_AP_STOP:
-      #ifndef NDEBUG
-      Serial.println("WiFi access point  stopped");
-      #endif
-      break;
-    case SYSTEM_EVENT_AP_STACONNECTED:
+    case EVENT_SOFTAPMODE_STACONNECTED:
       #ifndef NDEBUG
       Serial.println("Client connected");
       #endif
       // Set the flag when a client connects
       g_is_wifi_client_connected = true;
       break;
-    case SYSTEM_EVENT_AP_STADISCONNECTED:
+    case EVENT_SOFTAPMODE_STADISCONNECTED:
       #ifndef NDEBUG
       Serial.println("Client disconnected");
       #endif
       
       // Remove the flag when a client disconnects
       g_is_wifi_client_connected = false;
-      break;
-    case SYSTEM_EVENT_AP_STAIPASSIGNED:
-      #ifndef NDEBUG
-      Serial.println("Assigned IP address to client");
-      #endif
-      break;
-    case SYSTEM_EVENT_AP_PROBEREQRECVED:
-       #ifndef NDEBUG
-      Serial.println("Received probe request");
-      #endif
-      break;
-    case SYSTEM_EVENT_GOT_IP6:
-      #ifndef NDEBUG
-      Serial.println("IPv6 is preferred");
-      #endif
-      break;
-    case SYSTEM_EVENT_ETH_START:
-      #ifndef NDEBUG
-      Serial.println("Ethernet started");
-      #endif
-      break;
-    case SYSTEM_EVENT_ETH_STOP:
-      #ifndef NDEBUG
-      Serial.println("Ethernet stopped");
-      #endif
-      break;
-    case SYSTEM_EVENT_ETH_CONNECTED:
-      #ifndef NDEBUG
-      Serial.println("Ethernet connected");
-      #endif
-      break;
-    case SYSTEM_EVENT_ETH_DISCONNECTED:
-      #ifndef NDEBUG
-      Serial.println("Ethernet disconnected");
-      #endif
-      break;
-    case SYSTEM_EVENT_ETH_GOT_IP:
-      #ifndef NDEBUG
-      Serial.println("Obtained IP address");
-      #endif
       break;
     default: break;
 }}
@@ -203,10 +106,10 @@ void setup(void) {
 
   g_is_wifi_configured = get_wifi_credentials_from_eeprom(ssid, password);
 
-
   // Get the reset reason
-  esp_reset_reason_t reset_reason = esp_reset_reason();
-  if (reset_reason == ESP_RST_POWERON) {
+  const rst_info* resetInfo = system_get_rst_info();
+  resetInfo = ESP.getResetInfoPtr();
+  if (resetInfo->reason == REASON_DEFAULT_RST) {
     #ifndef NDEBUG
     Serial.println("Power on");
     #endif
