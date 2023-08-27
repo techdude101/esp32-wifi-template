@@ -8,6 +8,8 @@
 #include "HTMLForm.h" // HTML Form
 #include "wifi_config.h"
 
+// BUG: WiFi Config Web Page is Accessible When Connected to WiFi Access Point (NOT WHEN SOFT AP IS RUNNING AS EXPECTEED)
+
 #define BAUD_RATE 115200
 
 //#define NDEBUG
@@ -139,7 +141,7 @@ void setup(void) {
       Serial.println("Connecting to WiFi..");
       #endif
     }
-    network_connected = (WiFi.status() == WL_CONNECTED);
+    network_connected = true;
     g_is_wifi_connected = network_connected;
   }
 
