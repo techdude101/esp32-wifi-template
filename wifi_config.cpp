@@ -30,6 +30,8 @@ void get_wifi_psk_from_eeprom(char* password) {
   // WPA personal - a string of 64 hexadecimal digits, or as a passphrase of 8 to 63 printable ASCII characters
   // https://en.wikipedia.org/wiki/Wi-Fi_Protected_Access
   for (int i = 0; i < 63; i++) {
+    char c = (char)EEPROM.read((i + 32));
+    if (isprint(c) == 0) break; // Non printable character found
     password[i] = (char)EEPROM.read((i + 32));
   }
   return;

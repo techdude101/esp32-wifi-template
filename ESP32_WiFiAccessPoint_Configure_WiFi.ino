@@ -14,7 +14,7 @@
 
 //#define NDEBUG
 
-const char* SOFT_AP_SSID = "ESP32";
+const char* SOFT_AP_SSID = "ESPap";
 const char* SOFT_AP_PSK = "12345678"; // Must be 8 characters or more
 
 char ssid[32] = "";
@@ -22,6 +22,7 @@ char password[63] = "";
 static volatile boolean g_is_wifi_configured = false;
 static volatile boolean g_is_wifi_client_connected = false;
 static volatile boolean g_is_wifi_connected = false;
+static volatile boolean g_has_wifi_config_changed = false;
 
 AsyncWebServer server(80);
 
@@ -106,7 +107,7 @@ void WiFiEvent(WiFiEvent_t event) {
       break;
     case SYSTEM_EVENT_AP_STOP:
       #ifndef NDEBUG
-      Serial.println("WiFi access point  stopped");
+      Serial.println("WiFi access point stopped");
       #endif
       break;
     case SYSTEM_EVENT_AP_STACONNECTED:
@@ -202,7 +203,10 @@ void setup(void) {
   WiFi.onEvent(WiFiEvent);
 
   g_is_wifi_configured = get_wifi_credentials_from_eeprom(ssid, password);
-
+  #ifndef NDEBUG
+  Serial.print("WiFi Configured = ");
+  Serial.println(g_is_wifi_configured ? "True": "False");
+  #endif
 
   // Get the reset reason
   esp_reset_reason_t reset_reason = esp_reset_reason();
@@ -211,16 +215,17 @@ void setup(void) {
     Serial.println("Power on");
     #endif
     init_soft_ap = true;
-    g_is_wifi_configured = false;
   }
   
   if ((g_is_wifi_configured) && (init_soft_ap == false)) {
     // Connect to WiFi
-    if (strlen(password) != 0) {
+    if (strlen(password) > 7) {
       #ifndef NDEBUG
       Serial.println("WiFi password detected in saved config");
+      Serial.println(password);
       #endif
-      WiFi.begin(ssid, password);
+
+      WiFi.begin(ssid, (const char*)password);
     } else {
       #ifndef NDEBUG
       Serial.println("Attempting to connect to OPEN WiFi network");
@@ -236,8 +241,7 @@ void setup(void) {
       Serial.println("Connecting to WiFi..");
       #endif
     }
-    network_connected = (WiFi.status() == WL_CONNECTED);
-    g_is_wifi_connected = network_connected;
+    network_connected = g_is_wifi_connected;
   }
 
   if (network_connected == false) {
@@ -286,7 +290,7 @@ void setup(void) {
           Serial.println(p->value().c_str());
           #endif
           // If WiFi security type is "open" then set the password to an empty string
-          if (strcmp(p->value().c_str(), "open") == 0) {
+          if (strcmp(p->value().c_str(), "OPEN") == 0) {
             #ifndef NDEBUG
             Serial.println("Removing password - auth mode is open");
             #endif
@@ -307,6 +311,7 @@ void setup(void) {
       request->send(200, "text/html", "<h1>Restarting to apply settings</h1>");
       // Bug - intermittent web page not available (device restarts before web page can be sent to client)
       g_is_wifi_configured = true;
+      g_has_wifi_config_changed = true;
     });
 
     server.onNotFound([](AsyncWebServerRequest *request) {
@@ -348,19 +353,42 @@ void loop(void) {
     }
     delay(1);
   }
+  
+  #ifndef NDEBUG
+  Serial.println("1 minute timer elapsed");
+  Serial.println("Device should restart if WiFi is configured and no clients are connected");
+  Serial.print("WiFi Connected: ");
+  Serial.println(g_is_wifi_connected);
+  Serial.print("WiFi Client connected to soft AP: ");
+  Serial.println(g_is_wifi_client_connected);
+  Serial.print("WiFi Configured: ");
+  Serial.println(g_is_wifi_configured);
+  #endif
 
+  // BUG - device restarts when client connects to soft AP when existing WiFi configuration exists in EEPROM/FLASH
+  
   // Once configured, restart after 10 seconds
-  if (g_is_wifi_client_connected && g_is_wifi_configured) {
-      // Wait 10 seconds before restarting
-      for (uint8_t i = 0; i < 10; i++) {
-          delay(1000);
-      }
-      ESP.restart();
+  if (g_is_wifi_client_connected && g_is_wifi_configured && g_has_wifi_config_changed) {
+    // Wait 10 seconds before restarting
+    for (uint8_t i = 0; i < 10; i++) {
+      delay(1000);
+    }
+    #ifndef NDEBUG
+    Serial.println("Restart");
+    #endif
+    ESP.restart();
   }
   
   // BUG fix - reconnects to configured WiFi network every 60 seconds
   // Restart when wifi client is NOT connected, wifi IS configured in EEPROM and if NOT connected to a wifi network
-  if ((g_is_wifi_client_connected == false) && g_is_wifi_configured && (g_is_wifi_connected == false)) {
+  // client connected to device soft AP - don't restart
+  // device connected to AP - don't restart
+  // saved WiFi config + config changed - restart
+  // saved WiFi config + no WiFi connection (device to AP or client to device soft AP) - restart
+  // no saved WiFi config + no WiFi connection (device to AP or client to device soft AP) - don't restart
+  // no saved WiFi config + client connected to device soft AP - don't restart
+  // TODO: State machine for WiFi config states
+  if ((g_is_wifi_client_connected == false) && g_is_wifi_configured && (g_is_wifi_connected == false) && (g_has_wifi_config_changed == false)) {
     #ifndef NDEBUG
     Serial.println("Restart");
     #endif
